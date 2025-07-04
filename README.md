@@ -170,11 +170,6 @@ chmod +x build_app.sh
 
 MIT License
 
-## 📸 截图
-
-![主界面](screenshots/main.png)
-![服务器监控](screenshots/monitoring.png)
-
 ## 🔗 相关链接
 
 - [Streamlit 文档](https://docs.streamlit.io/)
