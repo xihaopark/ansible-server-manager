@@ -1,0 +1,160 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, '3.10', 3.11]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Lint with flake8
+      run: |
+        pip install flake8
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Test import modules
+      run: |
+        python -c "import streamlit; print('✅ Streamlit import successful')"
+        python -c "import ansible_runner; print('✅ Ansible-runner import successful')"
+        python -c "import pandas; print('✅ Pandas import successful')"
+        python -c "import yaml; print('✅ PyYAML import successful')"
+
+    - name: Test app syntax
+      run: |
+        python -m py_compile app_secure.py
+        python -m py_compile app.py
+        echo "✅ All Python files compiled successfully"
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+
+    - name: Run security scan with bandit
+      run: |
+        bandit -r . -f json -o bandit-report.json || true
+        bandit -r . || true
+
+    - name: Check for known vulnerabilities
+      run: |
+        pip install -r requirements.txt
+        safety check || true
+
+  build-docs:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install mkdocs mkdocs-material
+
+    - name: Create documentation structure
+      run: |
+        mkdir -p docs
+        cat > docs/index.md << 'EOL'
+        # Ansible 服务器管理工具
+
+        欢迎使用基于 Streamlit 和 Ansible 的服务器管理可视化工具！
+
+        ## 快速开始
+
+        ### 安装
+        ```bash
+        git clone https://github.com/xihaopark/ansible-server-manager.git
+        cd ansible-server-manager
+        chmod +x setup.sh
+        ./setup.sh
+        ```
+
+        ### 运行
+        ```bash
+        ./run.sh
+        ```
+
+        ## 功能特点
+
+        - 🖥️ **服务器状态监控**：实时检查服务器连接状态
+        - 🔧 **远程命令执行**：在选定的服务器上执行Shell命令
+        - 📋 **系统信息收集**：获取服务器的详细系统信息
+        - 📈 **资源监控**：监控CPU、内存、磁盘等资源使用情况
+        - 📦 **软件包管理**：安装、更新、删除软件包
+        - 🔧 **服务管理**：启动、停止、重启系统服务
+        - 📄 **日志查看**：查看系统和应用日志
+
+        ## 截图
+
+        ![主界面](images/main-interface.png)
+        ![监控面板](images/monitoring-panel.png)
+
+        EOL
+
+        cat > mkdocs.yml << 'EOL'
+        site_name: Ansible Server Manager
+        site_description: 基于Streamlit和Ansible的服务器管理可视化工具
+        site_author: xihao park
+        site_url: https://xihaopark.github.io/ansible-server-manager/
+
+        theme:
+          name: material
+          palette:
+            primary: blue
+            accent: light blue
+
+        nav:
+          - 首页: index.md
+
+        markdown_extensions:
+          - codehilite
+          - admonition
+        EOL
+
+    - name: Build documentation
+      run: mkdocs build
+
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./site 
